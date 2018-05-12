@@ -50,6 +50,12 @@ class InputLayer(Layer):
     def __init__(self, config={}):
         super().__init__(config)
         
+    def load_weights(self, wgt_dict={}):
+        pass
+    
+    def __call__(self, input_vec):
+        return input_vec
+        
 class Embedding(Layer):
     def __init__(self, config={}):
         super().__init__(config)
@@ -57,10 +63,11 @@ class Embedding(Layer):
         self.output_dim = self.config['output_dim']
         self.dtype = self.config['dtype']
         self.kernel = None
-        self.trainable_weights = [self.kernel]
+        self.trainable_weights = []
     
-    def load_weights(self, wgt=[]):
-        self.kernel = wgt[0].value
+    def load_weights(self, wgt_dict={}):
+        self.kernel = wgt_dict['embeddings:0'].value
+        self.trainable_weights = [self.kernel]
         
     def __call__(self, input_vec):
         return self.kernel[input_vec]
@@ -76,19 +83,21 @@ class SimpleRNN(Layer):
         self.kernel = None
         self.recurrent_kernel = None
         self.bias= None
-        if self.use_bias:
-            self.trainable_weight = [self.kernel, self.recurrent_kernel, self.bias]
-        else:
-            self.trainable_weight = [self.kernel, self.recurrent_kernel]
-    
-    def load_weights(self, wgt_list=[]):
-        self.kernel = wgt_list[0].value
-        self.recurrent_kernel = wgt_list[1].value
-        if self.use_bias:
-            self.bias = wgt_list[2].value
-        else:
+        self.trainable_weights = []
+        
+    def load_weights(self, wgt_dict={}):
+        self.kernel = wgt_dict['kernel:0'].value
+        self.recurrent_kernel = wgt_dict['recurrent_kernel:0'].value
+        try:
+            self.bias = wgt_dict['bias:0'].value
+        except KeyError:
             self.bias = np.zeros(shape=(self.units,))
         
+        if self.use_bias:
+            self.trainable_weights = [self.kernel, self.recurrent_kernel, self.bias]
+        else:
+            self.trainable_weights = [self.kernel, self.recurrent_kernel]
+    
         
     def __call__(self, input_vec):
         timesteps = input_vec.shape[-2]
@@ -177,18 +186,20 @@ class Dense(Layer):
         self.use_bias = self.config['use_bias']
         self.kernel = None
         self.bias= None
-        if self.use_bias:
-            self.trainable_weight = [self.kernel, self.bias]
-        else:
-            self.trainable_weight = [self.kernel]
+        self.trainable_weights = []
     
-    def load_weights(self, wgt_list=[]):
-        self.kernel = wgt_list[0].value
-        if self.use_bias:
-            self.bias = wgt_list[1].value
-        else:
+    def load_weights(self, wgt_dict={}):
+        self.kernel = wgt_dict['kernel:0'].value
+        try:
+            self.bias = wgt_dict['bias:0'].value
+        except KeyError:
             self.bias = np.zeros(shape=(self.units,))
-    
+        
+        if self.use_bias:
+            self.trainable_weights = [self.kernel, self.bias]
+        else:
+            self.trainable_weights = [self.kernel]
+        
     def __call__(self, input_vec):
         return self.activation(np.dot(input_vec, self.kernel) + self.bias)
 
@@ -261,4 +272,67 @@ class Concatenate(Layer):
         return np.concatenate(inputs, axis=self.axis)
 
 
+Layer_Dict = {
+    'InputLayer' : InputLayer,
+    'Add': Add,
+    'Subtract' : Subtract,
+    'Average' : Average,
+    'Multiply' : Multiply,
+    'Concatenate' : Concatenate,
+    'Embedding' : Embedding,
+    'SimpleRNN' : SimpleRNN,
+    'LSTM' : LSTM,
+    'GRU' : GRU,
+    'Dense' : Dense
+}
 
+class Model():
+    def __init__(self, config={}):
+        self.name = config['name']
+        self.input_layers= config['input_layers']
+        self.output_layers= config['output_layers']
+        self.layers = {}
+        
+        for lyr in config['layers']:
+            self.layers[lyr['name']] = Layer_Dict[lyr['class_name']](lyr)
+    
+    def __init__(self, h5filename):
+        file_pt = h5py.File(h5filename)
+        arch = json.loads(file_pt.attrs['model_config'].decode('utf-8'), encoding='utf-8')
+        config = arch['config']
+    
+        self.name = config['name']
+        self.input_layers= config['input_layers']
+        self.output_layers= config['output_layers']
+        self.layers = {}
+        
+        for lyr in config['layers']:
+            self.layers[lyr['name']] = Layer_Dict[lyr['class_name']](lyr)
+        
+        h5_dataset = file_pt['model_weights']
+        for nm in self.layers.keys():
+            for name in (h5_dataset[nm]):
+                self.layers[nm].load_weights(wgt_dict=dict(h5_dataset[nm][name]))
+        
+        file_pt.close()
+        
+    
+    def load_from_dataset(self, h5_dataset):
+        for nm in self.layers.keys():
+            for name in (h5_dataset[nm]):
+                self.layers[nm].load_weights(wgt_dict=dict(h5_dataset[nm][name]))
+        
+    def run_model(self, layer_call, *args):
+        if len(self.layers[layer_call].inbound_nodes) == 0:
+            return self.layers[layer_call](*args)
+        inp_list = []
+        inb_layers = self.layers[layer_call].inbound_nodes[0]
+        if len(inb_layers) > 1:
+            for i in range(len(inb_layers)):
+                inp_list.append(self.run_model(inb_layers[i][0], args[i]))
+            return self.layers[layer_call](inp_list)
+        else:
+            return self.layers[layer_call](self.run_model(inb_layers[0][0], *args))
+    
+    def __call__(self, *args):
+        return self.run_model(self.output_layers[0][0], *args)

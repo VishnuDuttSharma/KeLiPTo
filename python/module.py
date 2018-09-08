@@ -55,7 +55,18 @@ class InputLayer(Layer):
     
     def __call__(self, input_vec):
         return input_vec
-        
+
+class Dropout(Layer):
+    def __init__(self, config={}):
+        super().__init__(config)
+        self.rate = self.config['rate']
+            
+    def load_weights(self, wgt_dict={}):
+        pass
+    
+    def __call__(self, input_vec):
+        return input_vec
+    
 class Embedding(Layer):
     def __init__(self, config={}):
         super().__init__(config)
@@ -120,8 +131,8 @@ class LSTM(SimpleRNN):
         super().__init__(config)
         self.recurrent_activation = activation_dict[self.config['recurrent_activation']]
     
-    def load_weights(self, wgt_list=[]):
-        super().load_weights(wgt_list)
+    def load_weights(self, wgt_dict={}):
+        super().load_weights(wgt_dict)
 
     def __call__(self, input_vec):
         timesteps = input_vec.shape[-2]
@@ -151,8 +162,8 @@ class GRU(SimpleRNN):
         super().__init__(config)
         self.recurrent_activation = activation_dict[self.config['recurrent_activation']]
         
-    def load_weights(self, wgt_list=[]):
-        super().load_weights(wgt_list)
+    def load_weights(self, wgt_dict={}):
+        super().load_weights(wgt_dict)
 
     def __call__(self, input_vec):
         timesteps = input_vec.shape[-2]
@@ -274,6 +285,7 @@ class Concatenate(Layer):
 
 Layer_Dict = {
     'InputLayer' : InputLayer,
+    'Dropout' : Dropout,
     'Add': Add,
     'Subtract' : Subtract,
     'Average' : Average,

@@ -1,6 +1,7 @@
 import h5py
 import json
 import numpy as np
+import cv2 
 
 def get_config(filename):
     file_pt = h5py.File(filename)
@@ -67,6 +68,40 @@ class Dropout(Layer):
     def __call__(self, input_vec):
         return input_vec
     
+
+class SpatialDropout1D(Dropout):
+    def __init__(self, config={}):
+        super().__init__(config)
+        self.rate = self.config['rate']
+
+class SpatialDropout2D(Dropout):
+    def __init__(self, config={}):
+        super().__init__(config)
+        self.rate = self.config['rate']
+        
+class SpatialDropout3D(Dropout):
+    def __init__(self, config={}):
+        super().__init__(config)
+        self.rate = self.config['rate']
+        
+class ActivityRegularization(Layer):
+    def __init__(self, config={}):
+        super().__init__(config)
+        
+    def load_weights(self, wgt_dict={}):
+        pass
+    
+    def __call__(self, input_vec):
+        return input_vec    
+        
+class Reshape(Layer):
+    def __init__(self, config={}):
+        super().__init__(config)
+        self.target_shape = self.config['target_shape']
+    
+    def __call__(self, input_vec):
+        return np.reshape(input_vec, self.target_shape)
+
 class Embedding(Layer):
     def __init__(self, config={}):
         super().__init__(config)
@@ -214,6 +249,51 @@ class Dense(Layer):
     def __call__(self, input_vec):
         return self.activation(np.dot(input_vec, self.kernel) + self.bias)
 
+    
+class Conv1D(Layer):
+    def __init__(self, config={}):
+        super().__init__(config)
+        self.activation = activation_dict[self.config['activation']]
+        self.filters = self.config['filters']
+        self.kernel_size = self.config['kernel_size']
+        self.use_bias = self.config['use_bias']
+        self.padding = self.config['padding']
+        self.strides = self.config['strides']
+        self.kernel = None
+        self.bias= None
+        self.trainable_weights = []
+    
+    def load_weights(self, wgt_dict={}):
+        self.kernel = wgt_dict['kernel:0'].value
+        try:
+            self.bias = wgt_dict['bias:0'].value
+        except KeyError:
+            self.bias = np.zeros(shape=(self.units,))
+        
+        if self.use_bias:
+            self.trainable_weights = [self.kernel, self.bias]
+        else:
+            self.trainable_weights = [self.kernel]
+        
+    def __call__(self, input_vec):
+        if self.padding == 'valid':
+            P = 0
+        elif self.padding == 'same':
+            P = self.kernel_size[0]/2
+        
+        S = self.strides[0]
+
+        extra_x = self.kernel_size[0]//2
+        out_size = ((input_vec.shape[0] - self.kernel_size[0]) + 2*P)//S+1
+
+        fin_out = np.zeros(shape=(out_size, self.filters))
+
+        for itr in range(self.filters):
+            c_out = cv2.filter2D(src=input_vec, ddepth=-1, kernel=self.kernel[:,:,itr])
+            fin_out[:, itr:itr+1] = c_out[extra_x : out_size+extra_x] +self.bias[itr]
+        
+        return self.activation(fin_out)
+    
 class Add(Layer):
     def __init__(self, config={}):
         super().__init__(config)
@@ -283,9 +363,20 @@ class Concatenate(Layer):
         return np.concatenate(inputs, axis=self.axis)
 
 
+class Flatten(Layer):
+    def __init__(self, config={}):
+        super().__init__(config)
+            
+    def __call__(self, inputs):
+        return np.reshape(inputs, newshape=(inputs.shape[0], np.prod(inputs.shape[1:])))
+    
 Layer_Dict = {
     'InputLayer' : InputLayer,
     'Dropout' : Dropout,
+    'SpatialDropout1D' : SpatialDropout1D,
+    'SpatialDropout2D' : SpatialDropout2D,
+    'SpatialDropout3D' : SpatialDropout3D,
+    'ActivityRegularization' : ActivityRegularization,
     'Add': Add,
     'Subtract' : Subtract,
     'Average' : Average,
@@ -295,7 +386,9 @@ Layer_Dict = {
     'SimpleRNN' : SimpleRNN,
     'LSTM' : LSTM,
     'GRU' : GRU,
-    'Dense' : Dense
+    'Dense' : Dense,
+    'Flatten' : Flatten,
+    'Conv1D' : Conv1D
 }
 
 class Model():

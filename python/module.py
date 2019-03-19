@@ -290,7 +290,7 @@ class Conv1D(Layer):
 
         for itr in range(self.filters):
             c_out = cv2.filter2D(src=input_vec, ddepth=-1, kernel=self.kernel[:,:,itr])
-            fin_out[:, itr:itr+1] = c_out[extra_x : out_size+extra_x, :1] +self.bias[itr]
+            fin_out[:, itr:itr+1] = c_out[extra_x : S*out_size+extra_x : S, :1] +self.bias[itr]
         
         return self.activation(fin_out)
 
@@ -340,7 +340,7 @@ class Conv2D(Layer):
 
         for itr in range(self.filters):
             c_out = cv2.filter2D(src=input_vec, ddepth=-1, kernel=self.kernel[:,:,:,itr])
-            fin_out[:, :,itr] = c_out[extra_x:out_x+extra_x, extra_y:out_y+extra_y] +self.bias[itr]
+            fin_out[:, :,itr] = c_out[extra_x:S_x*out_x+extra_x:S_x, extra_y:S_y*out_y+extra_y:S_y] +self.bias[itr]
         
         return self.activation(fin_out)
 

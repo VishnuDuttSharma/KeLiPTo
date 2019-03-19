@@ -18,5 +18,4 @@ Python module depends on:
 - [h5py](https://www.h5py.org/)
 - [json](https://docs.python.org/2/library/json.html)
 - [NumPy](http://www.numpy.org/)
-
-
+- [OpenCV](https://opencv.org/)

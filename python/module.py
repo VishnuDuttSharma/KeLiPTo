@@ -290,9 +290,61 @@ class Conv1D(Layer):
 
         for itr in range(self.filters):
             c_out = cv2.filter2D(src=input_vec, ddepth=-1, kernel=self.kernel[:,:,itr])
-            fin_out[:, itr:itr+1] = c_out[extra_x : out_size+extra_x] +self.bias[itr]
+            fin_out[:, itr:itr+1] = c_out[extra_x : out_size+extra_x, :1] +self.bias[itr]
         
         return self.activation(fin_out)
+
+    
+class Conv2D(Layer):
+    def __init__(self, config={}):
+        super().__init__(config)
+        self.activation = activation_dict[self.config['activation']]
+        self.filters = self.config['filters']
+        self.kernel_size = self.config['kernel_size']
+        self.use_bias = self.config['use_bias']
+        self.padding = self.config['padding']
+        self.strides = self.config['strides']
+        self.kernel = None
+        self.bias= None
+        self.trainable_weights = []
+    
+    def load_weights(self, wgt_dict={}):
+        self.kernel = wgt_dict['kernel:0'].value
+        try:
+            self.bias = wgt_dict['bias:0'].value
+        except KeyError:
+            self.bias = np.zeros(shape=(self.units,))
+        
+        if self.use_bias:
+            self.trainable_weights = [self.kernel, self.bias]
+        else:
+            self.trainable_weights = [self.kernel]
+        
+    def __call__(self, input_vec):
+        if self.padding == 'valid':
+            P_x = 0
+            P_y = 0
+        elif self.padding == 'same':
+            P_x = self.kernel_size[0]/2
+            P_y = self.kernel_size[1]/2
+        
+        S_x, S_y = self.strides
+        
+        out_x = ((input_vec.shape[0] - self.kernel_size[0]) + 2*P_x)//S_x+1
+        out_y = ((input_vec.shape[1] - self.kernel_size[1]) + 2*P_y)//S_y+1
+
+        extra_x = self.kernel_size[0]//2
+        extra_y = self.kernel_size[1]//2
+        
+        fin_out = np.zeros(shape=(out_x, out_y, self.filters))
+
+        for itr in range(self.filters):
+            c_out = cv2.filter2D(src=input_vec, ddepth=-1, kernel=self.kernel[:,:,:,itr])
+            fin_out[:, :,itr] = c_out[extra_x:out_x+extra_x, extra_y:out_y+extra_y] +self.bias[itr]
+        
+        return self.activation(fin_out)
+
+
     
 class Add(Layer):
     def __init__(self, config={}):
@@ -388,7 +440,8 @@ Layer_Dict = {
     'GRU' : GRU,
     'Dense' : Dense,
     'Flatten' : Flatten,
-    'Conv1D' : Conv1D
+    'Conv1D' : Conv1D,
+    'Conv2D' : Conv2D
 }
 
 class Model():

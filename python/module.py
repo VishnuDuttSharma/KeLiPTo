@@ -1,7 +1,8 @@
 import h5py
 import json
 import numpy as np
-import cv2 
+import cv2
+from skimage import measure
 
 def get_config(filename):
     file_pt = h5py.File(filename)
@@ -344,8 +345,38 @@ class Conv2D(Layer):
         
         return self.activation(fin_out)
 
-
+class MaxPooling2D(Layer):
+    def __init__(self, config={}):
+        super().__init__(config)
+        self.pool_size = self.config['pool_size']
+        if type(self.pool_size) == 'int':
+            self.pool_size = (self.pool_size, self.pool_size)
+            
+    def load_weights(self, wgt_dict={}):
+        pass
     
+    def __call__(self, input_vec):
+        out_vec_list = []
+        for itr in range(input_vec.shape[0]):
+            out_vec_list.append(measure.block_reduce(input_vec[0], self.pool_size, np.max))
+        return np.concatenate(out_vec_list).transpose(1,2,0)
+
+class AveragePooling2D(Layer):
+    def __init__(self, config={}):
+        super().__init__(config)
+        self.pool_size = self.config['pool_size']
+        if type(self.pool_size) == 'int':
+            self.pool_size = (self.pool_size, self.pool_size)
+            
+    def load_weights(self, wgt_dict={}):
+        pass
+    
+    def __call__(self, input_vec):
+        out_vec_list = []
+        for itr in range(input_vec.shape[0]):
+            out_vec_list.append(measure.block_reduce(input_vec[0], self.pool_size, np.mean))
+        return np.concatenate(out_vec_list).transpose(1,2,0)
+
 class Add(Layer):
     def __init__(self, config={}):
         super().__init__(config)
